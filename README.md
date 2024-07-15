@@ -2,15 +2,15 @@
 
 ## Auto buy
 ```
-bash <(curl -fsSL https://raw.githubusercontent.com/Ptechgithub/Hamster-Auto-buy-BestCard/main/install.sh)
+bash <(curl -fsSL https://raw.githubusercontent.com/DYREX-FPV /Hamster-Auto-buy-BestCard/main/install.sh)
 ```
 ### More advanced Auto buy
 ```
-bash <(curl -fsSL https://raw.githubusercontent.com/Ptechgithub/Hamster-Auto-buy-BestCard/main/install_second.sh)
+bash <(curl -fsSL https://raw.githubusercontent.com/DYREX-FPV/Hamster-Auto-buy-BestCard/main/install_second.sh)
 ```
 ### Auto Clicker
 ```
-bash <(curl -fsSL https://raw.githubusercontent.com/Ptechgithub/Hamster-Auto-buy-BestCard/main/clicker.sh)
+bash <(curl -fsSL https://raw.githubusercontent.com/DYREX-FPV/Hamster-Auto-buy-BestCard/main/clicker.sh)
 ```
 ![29](https://raw.githubusercontent.com/Ptechgithub/configs/main/media/29.jpg)
 ---
