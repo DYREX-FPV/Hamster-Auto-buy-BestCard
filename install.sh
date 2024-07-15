@@ -60,4 +60,4 @@ fi
 
 # Run the Python script
 echo -e "${GREEN}Running the Hamster Auto Buy script...${NC}"
-python3 "$SC RIPT_NAME"
+python3 "./$SCRIPT_NAME"
