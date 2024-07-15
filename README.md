@@ -2,7 +2,7 @@
 
 ## Auto buy
 ```
-bash <(curl -fsSL https://raw.githubusercontent.com/DYREX-FPV /Hamster-Auto-buy-BestCard/main/install.sh)
+bash <(curl -fsSL https://raw.githubusercontent.com/DYREX-FPV/Hamster-Auto-buy-BestCard/main/install.sh)
 ```
 ### More advanced Auto buy
 ```
