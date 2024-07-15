@@ -46,13 +46,18 @@ pip3 install requests
 
 echo -e "${GREEN}All requirements have been installed successfully.${NC}"
 
-# Check if the Python script exists
+# Download the Python script
 SCRIPT_NAME="Hamster_Auto_buy.py"
+SCRIPT_URL="https://raw.githubusercontent.com/DYREX-FPV/Hamster-Auto-buy-BestCard/main/Hamster_Auto_buy.py"
+
+echo -e "${GREEN}Downloading $SCRIPT_NAME...${NC}"
+curl -fsSL "$SCRIPT_URL" -o "$SCRIPT_NAME"
+
 if [ ! -f "$SCRIPT_NAME" ]; then
-    echo -e "${RED}Error: $SCRIPT_NAME not found in the current directory.${NC}"
+    echo -e "${RED}Error: Failed to download $SCRIPT_NAME${NC}"
     exit 1
 fi
 
 # Run the Python script
 echo -e "${GREEN}Running the Hamster Auto Buy script...${NC}"
-python3 "$SCRIPT_NAME"
+python3 "$SC RIPT_NAME"
