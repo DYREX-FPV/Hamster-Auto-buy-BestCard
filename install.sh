@@ -58,6 +58,12 @@ if [ ! -f "$SCRIPT_NAME" ]; then
     exit 1
 fi
 
+# Print current directory and list files
+echo -e "${GREEN}Current directory:${NC}"
+pwd
+echo -e "${GREEN}Files in current directory:${NC}"
+ls -l
+
 # Run the Python script
 echo -e "${GREEN}Running the Hamster Auto Buy script...${NC}"
 python3 "./$SCRIPT_NAME"
