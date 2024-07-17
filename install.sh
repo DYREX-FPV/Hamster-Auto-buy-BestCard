@@ -1,69 +1,192 @@
 #!/bin/bash
 
-# ANSI color codes
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[0;33m'
-NC='\033[0m' # No Color
+# Colors
+red='\033[0;31m'
+green='\033[0;32m'
+yellow='\033[0;33m'
+purple='\033[0;35m'
+cyan='\033[0;36m'
+blue='\033[0;34m'
+rest='\033[0m'
 
-# Function to check if a command exists
-command_exists() {
-    command -v "$1" >/dev/null 2>&1
+# If running in Termux, update and upgrade
+if [ -d "$HOME/.termux" ] && [ -z "$(command -v jq)" ]; then
+    echo "Running update & upgrade ..."
+    pkg update -y
+    pkg upgrade -y
+fi
+
+# Function to install necessary packages
+install_packages() {
+    local packages=(curl jq bc)
+    local missing_packages=()
+
+    # Check for missing packages
+    for pkg in "${packages[@]}"; do
+        if ! command -v "$pkg" &> /dev/null; then
+            missing_packages+=("$pkg")
+        fi
+    done
+
+    # If any package is missing, install missing packages
+    if [ ${#missing_packages[@]} -gt 0 ]; then
+        if [ -n "$(command -v pkg)" ]; then
+            pkg install "${missing_packages[@]}" -y
+        elif [ -n "$(command -v apt)" ]; then
+            sudo apt update -y
+            sudo apt install "${missing_packages[@]}" -y
+        elif [ -n "$(command -v yum)" ]; then
+            sudo yum update -y
+            sudo yum install "${missing_packages[@]}" -y
+        elif [ -n "$(command -v dnf)" ]; then
+            sudo dnf update -y
+            sudo dnf install "${missing_packages[@]}" -y
+        else
+            echo -e "${yellow}Unsupported package manager. Please install required packages manually.${rest}"
+        fi
+    fi
 }
 
-# Check if Python is installed
-if ! command_exists python3; then
-    echo -e "${YELLOW}Python 3 is not installed. Installing Python 3...${NC}"
-    if command_exists apt-get; then
-        sudo apt-get update
-        sudo apt-get install -y python3 python3-pip
-    elif command_exists yum; then
-        sudo yum install -y python3 python3-pip
-    elif command_exists brew; then
-        brew install python
+# Install the necessary packages
+install_packages
+
+# Clear the screen
+clear
+
+# Function to load or get user input
+load_or_get_user_input() {
+    config_file="config.json"
+    if [ -f "$config_file" ]; then
+        Authorization=$(jq -r '.authorization' "$config_file")
+        min_balance_threshold=$(jq -r '.min_balance_threshold' "$config_file")
     else
-        echo -e "${RED}Unable to install Python 3. Please install it manually.${NC}"
-        exit 1
+        echo -e "${purple}=======${yellow}Hamster Combat Auto Buy best cards${purple}=======${rest}"
+        echo ""
+        echo -en "${green}Enter Authorization [${cyan}Example: ${yellow}Bearer 171852....${green}]: ${rest}"
+        read -r Authorization
+        echo -e "${purple}============================${rest}"
+        echo -en "${green}Enter minimum balance threshold (${yellow}the script will stop purchasing if the balance is below this amount${green}):${rest} "
+        read -r min_balance_threshold
+        
+        # Save configuration
+        echo "{\"authorization\": \"$Authorization\", \"min_balance_threshold\": $min_balance_threshold}" > "$config_file"
     fi
-fi
+}
 
-# Check if pip is installed
-if ! command_exists pip3; then
-    echo -e "${YELLOW}pip3 is not installed. Installing pip3...${NC}"
-    if command_exists apt-get; then
-        sudo apt-get install -y python3-pip
-    elif command_exists yum; then
-        sudo yum install -y python3-pip
-    else
-        echo -e "${RED}Unable to install pip3. Please install it manually.${NC}"
-        exit 1
-    fi
-fi
+# Function to purchase upgrade
+purchase_upgrade() {
+    upgrade_id="$1"
+    timestamp=$(date +%s%3N)
+    response=$(curl -s -X POST \
+      -H "Content-Type: application/json" \
+      -H "Authorization: $Authorization" \
+      -H "Origin: https://hamsterkombat.io" \
+      -H "Referer: https://hamsterkombat.io/" \
+      -d "{\"upgradeId\": \"$upgrade_id\", \"timestamp\": $timestamp}" \
+      https://api.hamsterkombatgame.io/clicker/buy-upgrade)
+    echo "$response"
+}
 
-# Install required Python packages
-echo -e "${GREEN}Installing required Python packages...${NC}"
-pip3 install requests
+# Function to get the best upgrade item
+get_best_item() {
+    curl -s -X POST -H "User-Agent: Mozilla/5.0 (Android 12; Mobile; rv:102.0) Gecko/102.0 Firefox/102.0" \
+        -H "Accept: */*" \
+        -H "Accept-Language: en-US,en;q=0.5" \
+        -H "Referer: https://hamsterkombat.io/" \
+        -H "Authorization: $Authorization" \
+        -H "Origin: https://hamsterkombat.io" \
+        -H "Connection: keep-alive" \
+        -H "Sec-Fetch-Dest: empty" \
+        -H "Sec-Fetch-Mode: cors" \
+        -H "Sec-Fetch-Site: same-site" \
+        -H "Priority: u=4" \
+        https://api.hamsterkombatgame.io/clicker/upgrades-for-buy | jq -r '.upgradesForBuy | map(select(.isExpired == false and .isAvailable)) | map(select(.profitPerHourDelta != 0 and .price != 0)) | sort_by(-(.profitPerHourDelta / .price))[:1] | .[0] | {id: .id, section: .section, price: .price, profitPerHourDelta: .profitPerHourDelta, cooldownSeconds: .cooldownSeconds}'
+}
 
-echo -e "${GREEN}All requirements have been installed successfully.${NC}"
+# Function to wait for cooldown period with countdown
+wait_for_cooldown() {
+    cooldown_seconds="$1"
+    echo -e "${yellow}Upgrade is on cooldown. Waiting for cooldown period of ${cyan}$cooldown_seconds${yellow} seconds...${rest}"
+    while [ $cooldown_seconds -gt 0 ]; do
+        echo -ne "${cyan}$cooldown_seconds\033[0K\r"
+        sleep 1
+        ((cooldown_seconds--))
+    done
+}
 
-# Download the Python script
-SCRIPT_NAME="Hamster_Auto_buy.py"
-SCRIPT_URL="https://raw.githubusercontent.com/DYREX-FPV/Hamster-Auto-buy-BestCard/main/Hamster_Auto_buy.py"
+# Main script logic
+main() {
+    # Variables to keep track of total spent and total profit
+    total_spent=0
+    total_profit=0
 
-echo -e "${GREEN}Downloading $SCRIPT_NAME...${NC}"
-curl -fsSL "$SCRIPT_URL" -o "$SCRIPT_NAME"
+    while true; do
+        # Get the best item to buy
+        best_item=$(get_best_item)
+        best_item_id=$(echo "$best_item" | jq -r '.id')
+        section=$(echo "$best_item" | jq -r '.section')
+        price=$(echo "$best_item" | jq -r '.price')
+        profit=$(echo "$best_item" | jq -r '.profitPerHourDelta')
+        cooldown=$(echo "$best_item" | jq -r '.cooldownSeconds')
 
-if [ ! -f "$SCRIPT_NAME" ]; then
-    echo -e "${RED}Error: Failed to download $SCRIPT_NAME${NC}"
-    exit 1
-fi
+        echo -e "${purple}============================${rest}"
+        echo -e "${green}Best item to buy:${yellow} $best_item_id ${green}in section:${yellow} $section${rest}"
+        echo -e "${blue}Price: ${cyan}$price${rest}"
+        echo -e "${blue}Profit per Hour: ${cyan}$profit${rest}"
+        echo ""
 
-# Print current directory and list files
-echo -e "${GREEN}Current directory:${NC}"
-pwd
-echo -e "${GREEN}Files in current directory:${NC}"
-ls -l
+        # Get current balanceCoins
+        current_balance=$(curl -s -X POST \
+            -H "Authorization: $Authorization" \
+            -H "Origin: https://hamsterkombat.io" \
+            -H "Referer: https://hamsterkombat.io/" \
+            https://api.hamsterkombatgame.io/clicker/sync | jq -r '.clickerUser.balanceCoins')
 
-# Run the Python script
-echo -e "${GREEN}Running the Hamster Auto Buy script...${NC}"
-python3 "./$SCRIPT_NAME"
+        # Check if current balance is above the threshold after purchase
+        if (( $(echo "$current_balance - $price > $min_balance_threshold" | bc -l) )); then
+            # Attempt to purchase the best upgrade item
+            if [ -n "$best_item_id" ]; then
+                echo -e "${green}Attempting to purchase upgrade '${yellow}$best_item_id${green}'...${rest}"
+                echo ""
+
+                purchase_status=$(purchase_upgrade "$best_item_id")
+
+                if echo "$purchase_status" | grep -q "error_code"; then
+                    wait_for_cooldown "$cooldown"
+                else
+                    purchase_time=$(date +"%Y-%m-%d %H:%M:%S")
+                    total_spent=$(echo "$total_spent + $price" | bc)
+                    total_profit=$(echo "$total_profit + $profit" | bc)
+                    current_balance=$(echo "$current_balance - $price" | bc)
+
+                    echo -e "${green}Upgrade ${yellow}'$best_item_id'${green} purchased successfully at ${cyan}$purchase_time${green}.${rest}"
+                    echo -e "${green}Total spent so far: ${cyan}$total_spent${green} coins.${rest}"
+                    echo -e "${green}Total profit added: ${cyan}$total_profit${green} coins per hour.${rest}"
+                    echo -e "${green}Current balance: ${cyan}$current_balance${green} coins.${rest}"
+                    
+                    sleep_duration=$((RANDOM % 8 + 5))
+                    echo -e "${green}Waiting for ${yellow}$sleep_duration${green} seconds before next purchase...${rest}"
+                    while [ $sleep_duration -gt 0 ]; do
+                        echo -ne "${cyan}$sleep_duration\033[0K\r"
+                        sleep 1
+                        ((sleep_duration--))
+                    done
+                fi
+            else
+                echo -e "${red}No valid item found to buy.${rest}"
+                break
+            fi
+        else
+            echo -e "${red}Current balance ${cyan}(${current_balance}) ${red}minus price of item ${cyan}(${price}) ${red}is below the threshold ${cyan}(${min_balance_threshold})${red}. Stopping purchases.${rest}"
+            break
+        fi
+    done
+}
+
+# Main program loop
+while true; do
+    load_or_get_user_input
+    main
+    echo -e "${yellow}Program completed. Waiting for 4 hours before restarting...${rest}"
+    sleep 14400  # 4 hours wait
+done
